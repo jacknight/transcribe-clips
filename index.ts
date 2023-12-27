@@ -1,4 +1,4 @@
-import mongoose, { Schema } from "mongoose";
+import mongoose from "mongoose";
 require("dotenv").config();
 import {
   checkLink,
@@ -101,4 +101,3 @@ const main = async () => {
 };
 
 main();
-``;

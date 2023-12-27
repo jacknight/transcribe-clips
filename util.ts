@@ -1,9 +1,8 @@
-import mongoose, { ConnectOptions, Schema, mongo } from "mongoose";
+import { Schema } from "mongoose";
 require("dotenv").config();
 import fs from "fs";
 import { v1 } from "uuid";
 import download from "download";
-const path = require("path");
 import { exec } from "child_process";
 import axios from "axios";
 
@@ -88,42 +87,4 @@ export const cleanup = () => {
   files.forEach((file) => {
     fs.unlinkSync(`${outputDir}/${file}`);
   });
-};
-
-const main = async () => {
-  await mongoose.connect(process.env.MONGO_URI!).catch((e) => console.error(e));
-  const clipModel = mongoose.model("clips", videoClipSchema);
-  const clips = await clipModel.find({});
-
-  for (let i = 0; i < clips.length; i++) {
-    const clipFileName = await downloadClip(clips[i].id);
-    if (!clipFileName) continue;
-    const audioFileName = await convertToWav(clipFileName).catch((e: any) => console.error(e));
-    if (!audioFileName) continue;
-    const txtFileName = await transcribeClip(audioFileName).catch((e: any) => console.error(e));
-    if (!txtFileName) continue;
-    const jsonObj = {
-      videoFile: clipFileName,
-      audioFile: audioFileName,
-      txtFile: txtFileName,
-      url: clips[i].id,
-    };
-
-    const jsonFileName = `${clipFileName}.json`;
-    if (fs.existsSync(jsonFileName)) {
-      fs.readFile(jsonFileName, "utf8", (err, data) => {
-        if (err) {
-          console.error(err);
-        } else {
-          const temp = JSON.parse(data);
-          temp.data.push(jsonObj);
-          fs.writeFileSync(jsonFileName, JSON.stringify(temp), "utf8");
-        }
-      });
-    } else {
-      fs.writeFileSync(jsonFileName, JSON.stringify({ data: [jsonObj] }), "utf8");
-    }
-  }
-
-  return;
 };
