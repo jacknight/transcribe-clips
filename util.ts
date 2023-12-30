@@ -7,8 +7,18 @@ import { exec } from "child_process";
 import axios from "axios";
 
 export const videoClipSchema = new Schema({
-  id: String,
-  transcription: String,
+  id: {
+    type: String,
+    required: true,
+  },
+  transcription: {
+    type: String,
+    required: false,
+  },
+  failed: {
+    type: Boolean,
+    required: false,
+  },
 });
 
 export const checkLink = async (url: string) => {

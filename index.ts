@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-require("dotenv").config();
+import "dotenv/config";
 import {
   checkLink,
   cleanup,
@@ -10,12 +10,42 @@ import {
   videoClipSchema,
 } from "./util";
 
+const clipModel = mongoose.model("clips", videoClipSchema);
+
+const markAsFailed = async (clip: any) => {
+  // Update db
+  return clipModel.updateOne(
+    { _id: clip._id },
+    {
+      $set: {
+        failed: true,
+      },
+    }
+  );
+};
+
 const main = async () => {
   console.info("Connecting to DB...");
-  await mongoose.connect(process.env.MONGO_URI!).catch((e) => console.error(e));
+  await mongoose.connect(process.env.MONGO_URI!).catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
   console.info("Connected to DB.");
 
-  const clipModel = mongoose.model("clips", videoClipSchema);
+  console.info("Convert all CDN links to MEDIA");
+  const allClips = await clipModel.find({ id: { $regex: "cdn" } });
+  await Promise.all(
+    allClips.map(async (clip) => {
+      const url = clip.get("id");
+      if (url.includes("cdn.discordapp.com")) {
+        await clipModel.updateOne(
+          { _id: clip._id },
+          { $set: { id: url.replace("cdn.discordapp.com", "media.discordapp.net") } }
+        );
+      }
+    })
+  );
+  console.info("Converted all CDN links to MEDIA");
 
   console.info("Removing duplicate URLs...");
   const results = await clipModel.aggregate([
@@ -41,12 +71,17 @@ const main = async () => {
 
   await Promise.all(
     results.map(async (result) => {
-      await clipModel.deleteOne({ _id: result.duplicates[1] });
+      for (let i = 1; i < result.duplicates.length; i++) {
+        await clipModel.deleteOne({ _id: result.duplicates[i] });
+      }
     })
   );
   console.info("Duplicates removed.");
 
-  const cursor = await clipModel.find({ transcription: { $exists: false } });
+  const cursor = await clipModel.find({
+    transcription: { $exists: false },
+    failed: { $ne: true },
+  });
 
   for (let i = 0; i < cursor.length; i++) {
     const dbClip = cursor[i];
@@ -62,19 +97,31 @@ const main = async () => {
       }
 
       // Download the clip temporarily
-      const clipFilePath = await downloadClip(url);
+      const clipFilePath = await downloadClip(url).catch(async (e: any) => {
+        console.error("\t- Failed to download: ", e);
+        await markAsFailed(dbClip);
+      });
+      if (!clipFilePath) continue;
       console.info("\t- Downloaded");
 
       // Convert to 16kHz WAV file.
-      const wavFilePath = await convertToWav(clipFilePath);
+      const wavFilePath = await convertToWav(clipFilePath).catch(async (e: any) => {
+        console.error("\t- Failed to convert to WAV: ", e);
+        await markAsFailed(dbClip);
+      });
+      if (!wavFilePath) continue;
       console.info("\t- WAV'ed");
 
       // Transcribe!
-      const transcriptionFilePath = await transcribeClip(wavFilePath);
+      const transcriptionFilePath = await transcribeClip(wavFilePath).catch(async (e: any) => {
+        console.error("\t- Failed to transcribe: ", e);
+        await markAsFailed(dbClip);
+      });
+      if (!transcriptionFilePath) continue;
       console.info("\t- Transcribed");
+
       const transcription = getTranscription(transcriptionFilePath);
-      console.info("\t- Downloaded");
-      if (!transcription) continue;
+      console.info("\t- Transcription Getted");
 
       // Update db
       await clipModel.updateOne(
@@ -86,8 +133,10 @@ const main = async () => {
               .replace(/\s\s+/g, " ")
               .trim(),
           },
+          $unset: { failed: "" },
         }
       );
+      console.info("\t- Clip updated");
     } catch (e: any) {
       console.error(e);
     }
@@ -97,7 +146,8 @@ const main = async () => {
   cleanup();
 
   console.info("Done.");
-  return;
+  process.exit(0);
 };
 
+// Entry point
 main();
