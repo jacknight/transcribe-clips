@@ -25,6 +25,8 @@ const markAsFailed = async (clip: any) => {
 };
 
 const main = async () => {
+  const force = process.argv[2] === "force";
+  console.info(`\n====== STARTING TRANSCRIPTION RUN ======\n====== ${new Date()} ======`);
   console.info("Connecting to DB...");
   await mongoose.connect(process.env.MONGO_URI!).catch((e) => {
     console.error(e);
@@ -80,7 +82,7 @@ const main = async () => {
 
   const cursor = await clipModel.find({
     transcription: { $exists: false },
-    failed: { $ne: true },
+    ...(!force && { failed: { $ne: true } }),
   });
 
   for (let i = 0; i < cursor.length; i++) {
