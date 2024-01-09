@@ -66,7 +66,7 @@ export const convertToWav = async (clipFilePath: string): Promise<string> => {
 export const transcribeClip = async (wavFilePath: string): Promise<string> => {
   return new Promise((resolve, reject) => {
     const dir = exec(
-      `whisper.cpp/main -t 16 -m whisper.cpp/models/ggml-large-v3.bin -f ${wavFilePath} -otxt -of ${wavFilePath}`,
+      `${__dirname}/whisper.cpp/main -t 16 -m whisper.cpp/models/ggml-large-v3.bin -f ${wavFilePath} -otxt -of ${wavFilePath}`,
       (err) => {
         if (err) {
           console.error(err);
